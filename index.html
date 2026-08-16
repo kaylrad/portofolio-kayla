@@ -8,33 +8,31 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=Playfair+Display:ital,wght@0,900;1,900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css"/>
+  <link rel="stylesheet" href="./app.css?v=4"/>
 </head>
 <body>
 
-  <!-- ══════════════════════════════════════════
-       LOADING SCREEN — Shopify Winter 2026 style
-       Square bar, minimal, no curves
-  ══════════════════════════════════════════ -->
+  <!-- Minimal KAYL loading screen -->
   <div id="loading-screen">
-    <div class="logo-ring-wrap">
-      <div class="ring"></div>
-      <div class="ring"></div>
-      <div class="ring"></div>
-      <img class="trail" src="./logo.png?v=2" alt="" />
-      <img class="trail" src="./logo.png?v=2" alt="" />
-      <img class="logo-spin" src="./logo.png?v=2" alt="KAYL Logo" />
-    </div>
-    <div class="loading-label">Initializing</div>
-    <div class="bar-track">
-      <div class="bar-fill" id="loading-bar-fill"></div>
-    </div>
-    <div class="dots-row">
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
+    <div class="loader-frame">
+      <div class="loader-diagonal" aria-hidden="true"></div>
+      <div class="loader-stage">
+        <div class="loader-copy" aria-live="polite">
+          <div class="loader-words">
+            <span>Kayl</span>
+            <span>Graphic designer</span>
+            <span>UI/UX designer</span>
+            <span>Video editor</span>
+            <span>Motion graphic</span>
+          </div>
+          <div class="loader-baseline" aria-hidden="true"></div>
+          <div class="loader-percent" id="loading-pct">0%</div>
+        </div>
+        <img class="loader-logo" src="./logo.png?v=2" alt="KAYL Logo" />
+      </div>
+      <div class="loader-progress" aria-hidden="true">
+        <div id="loading-bar-fill"></div>
+      </div>
     </div>
   </div>
 

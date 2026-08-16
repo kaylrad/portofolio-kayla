@@ -121,7 +121,13 @@ initWorkFromAPI()
    DESKTOP 3D
 ══════════════════════════════════════════════ */
 function initDesktop() {
-  lenis = new Lenis({ duration: 1.2, smooth: true })
+  lenis = new Lenis({
+    duration: 1.45,
+    smoothWheel: true,
+    wheelMultiplier: 0.82,
+    touchMultiplier: 1.15,
+    easing: t => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+  })
 
   const renderer  = createRenderer()
   const scene     = new THREE.Scene()
@@ -185,6 +191,7 @@ function initMobile3D() {
   setCameraFromScroll(0, camera)
   loadModel(scene, camera, renderer, raycaster, mouse)
   bindMobileEvents(renderer, scene, camera, raycaster, mouse)
+  bindSingleSwipeReveal()
 
   // Scroll handler — use native scroll on mobile (smoother than Lenis)
   window.addEventListener('scroll', () => {
@@ -268,6 +275,32 @@ function bindMobileEvents(renderer, scene, camera, raycaster, mouse) {
     camera.aspect = getAspectRatio(); camera.updateProjectionMatrix()
     renderer.setSize(window.innerWidth, window.innerHeight)
   })
+}
+
+function bindSingleSwipeReveal() {
+  let startY = null
+  let revealTriggered = false
+
+  window.addEventListener('touchstart', (e) => {
+    if (state.activeOverlay || state.itemsVisible) return
+    startY = e.touches[0]?.clientY ?? null
+    revealTriggered = false
+  }, { passive: true, capture: true })
+
+  window.addEventListener('touchmove', (e) => {
+    if (startY === null || revealTriggered || state.activeOverlay || state.itemsVisible) return
+    const currentY = e.touches[0]?.clientY
+    if (currentY === undefined || startY - currentY < 24) return
+
+    revealTriggered = true
+    const container = document.getElementById('scroll-container')
+    const revealEnd = container ? container.offsetTop + container.offsetHeight - window.innerHeight : window.innerHeight
+    window.scrollTo({ top: Math.max(0, revealEnd), behavior: 'smooth' })
+  }, { passive: true, capture: true })
+
+  window.addEventListener('touchend', () => {
+    startY = null
+  }, { passive: true, capture: true })
 }
 
 /* ══════════════════════════════════════════════
@@ -696,7 +729,7 @@ function setLoadingProgress(pct, status) {
 function dismissLoadingScreen() {
   const screen = document.getElementById('loading-screen')
   const app    = document.getElementById('app')
-  if (screen) { screen.classList.add('login-exit'); setTimeout(() => screen.remove(), 950) }
+  if (screen) { screen.classList.add('loader-exit'); setTimeout(() => screen.remove(), 1150) }
   if (app)    { app.classList.remove('app-hidden'); app.classList.add('app-visible') }
 }
 
