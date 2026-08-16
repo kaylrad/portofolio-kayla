@@ -116,6 +116,31 @@ initCardMini3D()
 initSkillScrollZoom()
 initViewMoreButton()
 initWorkFromAPI()
+initFooterReveal()
+
+function initFooterReveal() {
+  const footers = document.querySelectorAll('.site-footer')
+  if (!footers.length) return
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  if (reduceMotion || !('IntersectionObserver' in window)) {
+    footers.forEach(footer => footer.classList.add('footer-in-view'))
+    return
+  }
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return
+      entry.target.classList.add('footer-in-view')
+      observer.unobserve(entry.target)
+    })
+  }, { threshold: 0.2 })
+
+  footers.forEach(footer => {
+    footer.classList.add('is-reveal-pending')
+    observer.observe(footer)
+  })
+}
 
 /* ══════════════════════════════════════════════
    DESKTOP 3D
@@ -512,51 +537,118 @@ function initCardMini3D() {
    Vertical scroll → horizontal card slide
 ══════════════════════════════════════════════ */
 function initSkillScrollZoom() {
-  const overlay = document.getElementById('ov-about')
   const spacer  = document.getElementById('skills-spacer')
   const track   = document.getElementById('skills-track')
-  if (!overlay || !spacer || !track) return
+  if (!spacer || !track) return
 
-  const cards = track.querySelectorAll('.skill-card')
+  const cards = [...track.querySelectorAll('.skill-card')]
   if (!cards.length) return
+  const skills = cards.map(card => ({
+    name: card.dataset.name,
+    score: card.querySelector('.skill-card-score')?.textContent || '',
+    desc: card.querySelector('.skill-card-desc')?.textContent || ''
+  }))
 
-  function update() {
-    const spacerTop   = spacer.offsetTop
-    const spacerH     = spacer.offsetHeight
-    const overlayH    = overlay.clientHeight
-    const stickyH     = overlayH  // sticky element height = viewport
-    const scrollDist  = spacerH - stickyH
-    if (scrollDist <= 0) return
+  spacer.innerHTML = `
+    <section class="skill-orbit-section" aria-label="Software skills">
+      <div class="skill-orbit-label"><strong>Software</strong><span>Skills · 0${skills.length}</span></div>
+      <div class="skill-orbit-menu" tabindex="0" aria-label="Scroll or tap to choose a software">
+        <div class="skill-orbit-axis" aria-hidden="true"></div>
+        <div class="skill-orbit-items">
+          ${skills.map((skill, index) => `<button type="button" class="skill-orbit-item" data-skill-index="${index}">${skill.name}</button>`).join('')}
+        </div>
+        <div class="skill-orbit-help">Scroll here / tap a name</div>
+      </div>
+      <div class="skill-orbit-detail" aria-live="polite">
+        <div class="skill-detail-index">01 / 0${skills.length}</div>
+        <div class="skill-detail-score"></div>
+        <div class="skill-detail-rule"></div>
+        <h3 class="skill-detail-name"></h3>
+        <p class="skill-detail-desc"></p>
+      </div>
+    </section>`
 
-    // Progress 0→1 through the spacer
-    const scrollInSpacer = overlay.scrollTop - spacerTop
-    const progress = Math.max(0, Math.min(1, scrollInSpacer / scrollDist))
+  const menu = spacer.querySelector('.skill-orbit-menu')
+  const items = [...spacer.querySelectorAll('.skill-orbit-item')]
+  const detail = spacer.querySelector('.skill-orbit-detail')
+  let current = 0
+  let wheelLock = false
+  let touchStartY = 0
 
-    // Horizontal translate distance
-    const trackWidth    = track.scrollWidth
-    const viewportWidth = track.parentElement.clientWidth
-    const maxTranslate  = Math.max(0, trackWidth - viewportWidth)
+  function positionItems() {
+    const mobile = window.matchMedia('(max-width: 700px)').matches
+    const width = menu.clientWidth
+    const height = menu.clientHeight
+    const originX = -45
+    const radius = Math.min(390, width * 0.52)
+    const centerY = mobile ? height * 0.66 : height * 0.52
+    const step = 20
 
-    // Move track left
-    track.style.transform = `translateX(${-progress * maxTranslate}px)`
-
-    // Determine which cards are near-center and mark them visible
-    // Wider threshold so cards appear smoothly as they approach center
-    const cardWidth = 320 + 24  // card flex-basis + gap
-    const threshold = cardWidth * 0.8
-    cards.forEach((card, i) => {
-      const cardCenter = (i * cardWidth + cardWidth / 2) - (progress * maxTranslate)
-      const vpCenter   = viewportWidth / 2
-      const isActive   = Math.abs(cardCenter - vpCenter) < threshold
-      card.classList.toggle('visible', isActive)
+    items.forEach((item, index) => {
+      let distance = index - current
+      if (distance > skills.length / 2) distance -= skills.length
+      if (distance < -skills.length / 2) distance += skills.length
+      const angle = distance * step
+      const radians = angle * Math.PI / 180
+      if (mobile) {
+        item.style.left = `${width / 2}px`
+        item.style.top = `${centerY + distance * 46}px`
+        item.style.setProperty('--rotation', '0deg')
+      } else {
+        item.style.left = `${originX + Math.cos(radians) * radius}px`
+        item.style.top = `${centerY + Math.sin(radians) * radius}px`
+        item.style.setProperty('--rotation', `${angle}deg`)
+      }
+      const visibleRange = mobile ? 1 : 2
+      item.classList.toggle('is-in-range', Math.abs(distance) <= visibleRange)
+      item.setAttribute('aria-hidden', Math.abs(distance) > visibleRange ? 'true' : 'false')
+      item.tabIndex = Math.abs(distance) <= visibleRange ? 0 : -1
     })
   }
 
-  overlay.addEventListener('scroll', update, { passive: true })
-  // Re-run on resize to recalculate layout metrics
-  window.addEventListener('resize', update)
-  // Delay initial run to ensure layout is settled
-  requestAnimationFrame(() => requestAnimationFrame(update))
+  function selectSkill(next) {
+    current = (next + skills.length) % skills.length
+    items.forEach((item, index) => {
+      item.classList.toggle('is-active', index === current)
+      item.setAttribute('aria-pressed', index === current ? 'true' : 'false')
+    })
+    positionItems()
+    detail.classList.remove('is-changing')
+    void detail.offsetWidth
+    detail.querySelector('.skill-detail-index').textContent = `${String(current + 1).padStart(2, '0')} / ${String(skills.length).padStart(2, '0')}`
+    detail.querySelector('.skill-detail-score').textContent = skills[current].score
+    detail.querySelector('.skill-detail-name').textContent = skills[current].name
+    detail.querySelector('.skill-detail-desc').textContent = skills[current].desc
+    detail.classList.add('is-changing')
+  }
+
+  menu.addEventListener('click', event => {
+    const item = event.target.closest('.skill-orbit-item')
+    if (!item) return
+    event.preventDefault()
+    event.stopPropagation()
+    selectSkill(Number(item.dataset.skillIndex))
+  })
+  menu.addEventListener('wheel', event => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (wheelLock || Math.abs(event.deltaY) < 3) return
+    wheelLock = true
+    selectSkill(current + (event.deltaY > 0 ? 1 : -1))
+    setTimeout(() => { wheelLock = false }, 220)
+  }, { passive: false })
+  menu.addEventListener('keydown', event => {
+    if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return
+    event.preventDefault()
+    selectSkill(current + (event.key === 'ArrowDown' ? 1 : -1))
+  })
+  menu.addEventListener('touchstart', event => { touchStartY = event.touches[0].clientY }, { passive: true })
+  menu.addEventListener('touchend', event => {
+    const distance = touchStartY - event.changedTouches[0].clientY
+    if (Math.abs(distance) > 24) selectSkill(current + (distance > 0 ? 1 : -1))
+  }, { passive: true })
+  window.addEventListener('resize', positionItems)
+  selectSkill(0)
 }
 
 /* ══════════════════════════════════════════════
