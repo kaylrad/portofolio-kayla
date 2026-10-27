@@ -1141,29 +1141,55 @@ function updateObjectLabels(camera) {
   if (!state.model) return
   state.model.updateMatrixWorld(true)
   camera.updateMatrixWorld(true)
-  const bounds = new THREE.Box3()
-  const anchor = new THREE.Vector3()
+  const viewport = { width: window.innerWidth, height: window.innerHeight }
   const targets = { id_card: 'lbl-id', phone: 'lbl-ph', Base: 'lbl-lp' }
   Object.entries(targets).forEach(([name, id]) => {
     const label = document.getElementById(id)
     const node = state.nodes[name]
     if (!label || !node) return
-    bounds.setFromObject(node)
-    bounds.getCenter(anchor)
-    anchor.project(camera)
-    const visible = !state.activeOverlay && state.smoothScroll > 0.6 &&
-      anchor.z > -1 && anchor.z < 1 && Math.abs(anchor.x) < 1 && Math.abs(anchor.y) < 1
+    const bounds = getObjectScreenBounds(node, camera, viewport)
+    const visible = !state.activeOverlay && state.smoothScroll > 0.6 && bounds &&
+      bounds.right > 0 && bounds.left < viewport.width && bounds.bottom > 0 && bounds.top < viewport.height
     label.style.opacity = visible ? '0.9' : '0'
     if (!visible) return
-    bounds.getCenter(anchor)
-    anchor.y = bounds.max.y
-    anchor.project(camera)
-    const x = (anchor.x + 1) * window.innerWidth / 2
-    const y = (1 - anchor.y) * window.innerHeight / 2
+    const x = (bounds.left + bounds.right) / 2
+    // Attach to the visible silhouette, never to a world-axis bounding box.
+    const below = bounds.bottom + 10
+    const y = below + label.offsetHeight <= viewport.height - 12
+      ? below : bounds.top - label.offsetHeight - 10
     const half = label.offsetWidth / 2
-    label.style.left = `${clamp(x, half + 12, window.innerWidth - half - 12)}px`
-    label.style.top = `${clamp(y - label.offsetHeight - 12, 12, window.innerHeight - label.offsetHeight - 12)}px`
+    if (y < 12 || y + label.offsetHeight > viewport.height - 12) {
+      label.style.opacity = '0'
+      return
+    }
+    label.style.left = `${clamp(x, half + 12, viewport.width - half - 12)}px`
+    label.style.top = `${y}px`
   })
+}
+
+function getObjectScreenBounds(node, camera, viewport) {
+  const point = new THREE.Vector3()
+  const bounds = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
+  node.traverse(mesh => {
+    if (!mesh.isMesh || !mesh.visible) return
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
+    const box = mesh.geometry.boundingBox
+    if (!box || box.isEmpty()) return
+    for (let corner = 0; corner < 8; corner++) {
+      point.set(corner & 1 ? box.max.x : box.min.x,
+        corner & 2 ? box.max.y : box.min.y,
+        corner & 4 ? box.max.z : box.min.z)
+      point.applyMatrix4(mesh.matrixWorld).project(camera)
+      if (point.z < -1 || point.z > 1) continue
+      const x = (point.x + 1) * viewport.width / 2
+      const y = (1 - point.y) * viewport.height / 2
+      bounds.left = Math.min(bounds.left, x)
+      bounds.right = Math.max(bounds.right, x)
+      bounds.top = Math.min(bounds.top, y)
+      bounds.bottom = Math.max(bounds.bottom, y)
+    }
+  })
+  return Number.isFinite(bounds.left) ? bounds : null
 }
 
 function tickObjectInteractions() {
@@ -1298,8 +1324,9 @@ async function initWorkFromAPI() {
       let media
       if (fileId && item.file_type === 'video') {
         if (IS_TOUCH) {
-          // Mobile: show thumbnail, lazy-load iframe on tap (saves massive resources)
-          media = `<img src="${driveImageUrl(fileId)}" alt="${item.title}" data-drive-video="${fileId}" style="cursor:pointer">`
+          // Drive's touch controls cannot be styled inside a cross-origin iframe.
+          // Use its full-size player on phones instead of a cramped embedded player.
+          media = `<a class="work-video-link" href="https://drive.google.com/file/d/${fileId}/view" target="_blank" rel="noopener noreferrer" aria-label="Tonton video di Google Drive"><img src="${driveImageUrl(fileId)}" alt="" loading="lazy"><span class="work-video-link-play" aria-hidden="true">&#9654;</span><span class="work-video-link-caption">Tonton video ↗</span></a>`
         } else {
           // Desktop: lazy iframe (loads only when scrolled into view)
           media = `<iframe src="https://drive.google.com/file/d/${fileId}/preview" title="Video preview" loading="lazy" allow="autoplay; fullscreen" allowfullscreen style="width:100%;aspect-ratio:16/9;border:none;display:block"></iframe>`
@@ -1341,12 +1368,15 @@ async function initWorkFromAPI() {
 ══════════════════════════════════════════════ */
 function addMobileVideoPlayButtons() {
   if (!IS_TOUCH) return
+  document.querySelectorAll('.work-video-link img').forEach(img => {
+    const hideFailedThumbnail = () => { img.style.visibility = 'hidden' }
+    img.addEventListener('error', hideFailedThumbnail)
+    if (img.complete && !img.naturalWidth) hideFailedThumbnail()
+  })
 
   document.querySelectorAll('.work-card').forEach(card => {
     const video   = card.querySelector('video')
-    const iframe  = card.querySelector('iframe')
-    const driveImg = card.querySelector('img[data-drive-video]')
-    if (!video && !iframe && !driveImg) return
+    if (!video) return
 
     // Skip if play button already added
     if (card.querySelector('.work-card-play')) return
@@ -1367,19 +1397,6 @@ function addMobileVideoPlayButtons() {
         video.style.pointerEvents = 'auto'
         video.controls = true
         video.play().catch(() => { btn.style.display = '' })
-      } else if (driveImg) {
-        // Lazy-load Drive iframe on tap (replaces thumbnail)
-        const fileId = driveImg.dataset.driveVideo
-        const iframe = document.createElement('iframe')
-        iframe.src = `https://drive.google.com/file/d/${fileId}/preview`
-        iframe.title = 'Video preview'
-        iframe.allow = 'autoplay; fullscreen'
-        iframe.allowFullscreen = true
-        iframe.style.cssText = 'width:100%;border:none;display:block;pointer-events:auto'
-        driveImg.replaceWith(iframe)
-      } else if (iframe) {
-        iframe.style.pointerEvents = 'auto'
-        iframe.click()
       }
       btn.style.display = 'none'
     })

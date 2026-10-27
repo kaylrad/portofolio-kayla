@@ -98,11 +98,12 @@ canvas { display: block; }
   position: fixed; z-index: 20; pointer-events: none;
   opacity: 0;
   transform: translateX(-50%);
+  text-align: center;
   transition: opacity 0.3s var(--ease-out);
 }
 .ilabel .dot {
   width: 5px; height: 5px; background: var(--accent);
-  border-radius: 50%; margin-bottom: 8px; box-shadow: 0 0 10px var(--accent);
+  border-radius: 50%; margin: 0 auto 8px; box-shadow: 0 0 10px var(--accent);
 }
 .ilabel .lname {
   font-size: 9px; letter-spacing: 3px; color: var(--accent);
@@ -1143,9 +1144,6 @@ body #ov-phone .connect-wrap {
   }
 
   /* Labels */
-  #lbl-id  { top: 38% !important; left: 4% !important; }
-  #lbl-ph  { top: 28% !important; right: 4% !important; }
-  #lbl-lp  { top: 62% !important; left: 46% !important; }
   .ilabel .lname { font-size: 8px; letter-spacing: 2px; }
   .ilabel .ldesc { font-size: 10px; }
 
@@ -1413,10 +1411,23 @@ body.mobile-mode #click-hint {
   transform: none; pointer-events: auto;
 }
 
-/* Mobile: disable pointer-events on video/iframe so scrolling works over them */
-body.mobile-mode .work-card video,
-body.mobile-mode .work-card iframe {
-  pointer-events: none;
+.work-video-link {
+  position: relative; display: block; color: #fff; aspect-ratio: 16 / 9;
+  overflow: hidden; background: #17211c;
+}
+.work-video-link img { width: 100%; height: 100%; object-fit: cover; }
+.work-video-link-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: grid; place-items: center; width: 52px; height: 52px;
+  border-radius: 50%; background: rgba(0,0,0,.72); font-size: 20px;
+}
+.work-video-link-caption {
+  position: absolute; right: 10px; bottom: 10px; padding: 6px 9px;
+  background: #101310; border-radius: 4px; font-size: 11px;
+}
+body.mobile-mode .work-card.is-video,
+body.mobile-mode .work-card.is-video:hover {
+  transform: none; will-change: auto;
 }
 
 /* Mobile: play button overlay on video cards */
