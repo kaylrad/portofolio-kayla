@@ -13,10 +13,21 @@ app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3001'] }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files (for production)
-app.use(express.static(path.join(__dirname, '..')));
-app.use(express.static(path.join(__dirname, '..', 'public')));
-app.use(express.static(path.join(__dirname, '..', 'dist')));
+// Serve the bundled entry point. The source HTML imports npm packages that
+// browsers cannot resolve without Vite, leaving its loading screen at 0%.
+const projectRoot = path.join(__dirname, '..');
+const distRoot = path.join(projectRoot, 'dist');
+app.get(['/', '/index.html'], (req, res) => {
+  const entry = path.join(distRoot, 'index.html');
+  if (!fs.existsSync(entry)) {
+    return res.status(503).type('text').send('Portfolio belum siap. Jalankan npm run build, lalu muat ulang halaman ini.');
+  }
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(entry);
+});
+app.use(express.static(distRoot, { index: false }));
+app.use(express.static(path.join(projectRoot, 'public')));
+app.use(express.static(projectRoot, { index: false }));
 
 // Dashboard route
 app.get('/dashboard', (req, res) => {

@@ -37,11 +37,6 @@ const CLICK_TARGETS = {
   phone: 'phone', 'Object_4.001': 'phone',
   id_card: 'about', Object_2: 'about',
 }
-const LABEL_TARGETS = {
-  Base: 'lbl-lp', Screen: 'lbl-lp',
-  phone: 'lbl-ph', 'Object_4.001': 'lbl-ph',
-  id_card: 'lbl-id', Object_2: 'lbl-id',
-}
 const INTERACTION_ROOTS = {
   Base: 'Base', Screen: 'Base',
   phone: 'phone', 'Object_4.001': 'phone',
@@ -103,6 +98,9 @@ function loadSharedGLTF() {
    ENTRY
 ══════════════════════════════════════════════ */
 setLoadingProgress(5, 'Initialising scene…')
+updateScrollProgress()
+window.addEventListener('pageshow', () => updateScrollProgress())
+window.addEventListener('resize', () => updateScrollProgress())
 
 // Mobile gets a reduced-quality 3D scene (lower pixel ratio, no lenis)
 if (IS_TOUCH) {
@@ -172,6 +170,7 @@ function initDesktop() {
     requestAnimationFrame(loop)
     if (!tabVisible) return  // Skip all work when tab is hidden
     lenis.raf(performance.now())
+    updateScrollProgress()
     const dt = clock.getDelta()
     state.elapsedTime += dt
 
@@ -181,10 +180,11 @@ function initDesktop() {
 
     smoothParallax()
     tickScrollAnimation()
-    setCameraFromScroll(state.scroll, camera)
+    setCameraFromScroll(state.smoothScroll, camera)
     tickFloatingObjects()
     tickLaptopPose()
     tickObjectInteractions()
+    updateObjectLabels(camera)
     tickBackground()
     accent.intensity = 0.9 + Math.sin(state.elapsedTime * 1.6) * 0.25
 
@@ -219,15 +219,8 @@ function initMobile3D() {
   bindSingleSwipeReveal()
 
   // Scroll handler — use native scroll on mobile (smoother than Lenis)
-  window.addEventListener('scroll', () => {
-    const max = document.documentElement.scrollHeight - window.innerHeight
-    state.scroll = clamp(window.scrollY / max, 0, 1)
-    const show = state.scroll > 0.60
-    if (show !== state.itemsVisible) {
-      state.itemsVisible = show
-      el.clickHint.style.opacity = show ? '1' : '0'
-    }
-  }, { passive: true })
+  window.addEventListener('scroll', () => updateScrollProgress(), { passive: true })
+  updateScrollProgress()
 
   // Throttle to ~30fps on mobile for smoother performance
   let lastFrame = 0
@@ -250,10 +243,11 @@ function initMobile3D() {
 
     smoothParallax()
     tickScrollAnimation()
-    setCameraFromScroll(state.scroll, camera)
+    setCameraFromScroll(state.smoothScroll, camera)
     tickFloatingObjects()
     tickLaptopPose()
     tickObjectInteractions()
+    updateObjectLabels(camera)
     tickBackground()
     accent.intensity = 0.9 + Math.sin(state.elapsedTime * 1.6) * 0.25
     renderer.render(scene, camera)
@@ -692,6 +686,7 @@ function openOverlay(id) {
   // Mobile uses native overflow scrolling via CSS
 
   overlayEl.classList.add('active')
+  document.querySelectorAll('.ilabel').forEach(label => { label.style.opacity = '0' })
   lazyLoadMedia(overlayEl)
 }
 
@@ -773,10 +768,8 @@ function updateFolderParallax(ov) {
     if (rect.top <= 0) {
       const d = Math.abs(rect.top)
       cat.style.transform = `scale(${clamp(1 - d / 2500, 0.92, 1)})`
-      cat.style.filter    = `brightness(${clamp(1 - d / 1000, 0.4, 1)})`
     } else {
       cat.style.transform = 'scale(1)'
-      cat.style.filter    = 'brightness(1)'
     }
   })
 }
@@ -980,17 +973,7 @@ function scrubAnimations(time) {
 ══════════════════════════════════════════════ */
 function bindDesktopEvents(renderer, scene, camera, raycaster, mouse) {
   // Scroll
-  lenis.on('scroll', ({ scroll: scrollY }) => {
-    const max       = document.documentElement.scrollHeight - window.innerHeight
-    state.scroll    = clamp(scrollY / max, 0, 1)
-    el.progress.style.width = `${state.scroll * 100}%`
-    el.scrollHint.style.opacity = state.scroll > 0.07 ? '0' : '1'
-    const show = state.scroll > 0.60
-    if (show !== state.itemsVisible) {
-      state.itemsVisible = show
-      el.clickHint.style.opacity = show ? '1' : '0'
-    }
-  })
+  lenis.on('scroll', ({ scroll }) => updateScrollProgress(scroll))
 
   // Resize
   window.addEventListener('resize', () => {
@@ -1034,17 +1017,6 @@ function bindDesktopEvents(renderer, scene, camera, raycaster, mouse) {
 
     if (!state.model) return
     const hits = doRaycast(e, renderer, camera, raycaster, mouse, scene)
-
-    // Labels
-    document.querySelectorAll('.ilabel').forEach(l => { l.style.opacity = '0' })
-    if (state.itemsVisible) {
-      for (const hit of hits) {
-        const lId = findVal(hit.object, LABEL_TARGETS); if (!lId) continue
-        const label = document.getElementById(lId)
-        if (label) { label.style.opacity = '1'; label.style.transform = 'translateY(0px)' }
-        break
-      }
-    }
 
     // Hover name
     state.hoveredObjectName = null
@@ -1090,6 +1062,17 @@ function updateCursorRing() {
   el.cursorRing.style.top  = `${state.ringY}px`
 }
 
+function updateScrollProgress(scrollY = window.scrollY) {
+  if (state.activeOverlay) return
+  const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
+  state.scroll = clamp(scrollY / max, 0, 1)
+  state.itemsVisible = state.scroll > 0.60
+  el.progress.style.width = `${state.scroll * 100}%`
+  el.scrollHint.style.opacity = state.scroll > 0.07 ? '0' : '1'
+  el.scrollHint.style.visibility = state.scroll > 0.07 ? 'hidden' : 'visible'
+  el.clickHint.style.opacity = state.itemsVisible ? '1' : '0'
+}
+
 function smoothParallax() {
   state.parallax.x += (state.rawParallax.x * PARALLAX_STRENGTH - state.parallax.x) * 0.06
   state.parallax.y += (state.rawParallax.y * PARALLAX_STRENGTH - state.parallax.y) * 0.06
@@ -1097,8 +1080,22 @@ function smoothParallax() {
 
 function tickScrollAnimation() {
   if (!state.mixers.length || !state.maxAnimDuration) return
+  Object.entries(state.originalY).forEach(([name, y]) => {
+    if (state.nodes[name]) state.nodes[name].position.y = y
+  })
+  Object.entries(state.interactions).forEach(([name, interaction]) => {
+    if (interaction.animationScale) state.nodes[name].scale.copy(interaction.animationScale)
+  })
   state.smoothScroll += (state.scroll - state.smoothScroll) * 0.4
   scrubAnimations(state.smoothScroll * state.maxAnimDuration)
+  // Capture this frame's authored pose before adding floating/hover offsets.
+  // Never reuse a pose captured on a previous trip through the scroll sequence.
+  Object.keys(FLOATING_OBJECTS).forEach(name => {
+    if (state.nodes[name]) state.originalY[name] = state.nodes[name].position.y
+  })
+  Object.entries(state.interactions).forEach(([name, interaction]) => {
+    interaction.animationScale = state.nodes[name].scale.clone()
+  })
 }
 
 function setCameraFromScroll(progress, camera) {
@@ -1125,22 +1122,48 @@ function setCameraFromScroll(progress, camera) {
 }
 
 function tickFloatingObjects() {
-  if (!state.model || !state.itemsVisible) return
+  if (!state.model) return
+  const reveal = clamp((state.smoothScroll - 0.85) / 0.15, 0, 1)
   Object.entries(FLOATING_OBJECTS).forEach(([name, cfg]) => {
     const node = state.nodes[name]; if (!node) return
-    if (state.originalY[name] === undefined && state.scroll > 0.95) state.originalY[name] = node.position.y
     if (state.originalY[name] !== undefined)
-      node.position.y = state.originalY[name] + Math.sin(state.elapsedTime * cfg.speed + cfg.phase) * cfg.amplitude
+      node.position.y = state.originalY[name] + Math.sin(state.elapsedTime * cfg.speed + cfg.phase) * cfg.amplitude * reveal
   })
 }
 
 function tickLaptopPose() {
-  const laptop = state.nodes.Base
   const screen = state.nodes.Screen
-  if (laptop && state.originalY.Base !== undefined)
-    laptop.position.y = state.originalY.Base + clamp((state.scroll - 0.6) / 0.2, 0, 1) * 0.8
   if (screen)
-    screen.rotation.x = -Math.PI * 0.6 * clamp((state.scroll - 0.8) / 0.2, 0, 1)
+    screen.rotation.x = -Math.PI * 0.6 * clamp((state.smoothScroll - 0.8) / 0.2, 0, 1)
+}
+
+function updateObjectLabels(camera) {
+  if (!state.model) return
+  state.model.updateMatrixWorld(true)
+  camera.updateMatrixWorld(true)
+  const bounds = new THREE.Box3()
+  const anchor = new THREE.Vector3()
+  const targets = { id_card: 'lbl-id', phone: 'lbl-ph', Base: 'lbl-lp' }
+  Object.entries(targets).forEach(([name, id]) => {
+    const label = document.getElementById(id)
+    const node = state.nodes[name]
+    if (!label || !node) return
+    bounds.setFromObject(node)
+    bounds.getCenter(anchor)
+    anchor.project(camera)
+    const visible = !state.activeOverlay && state.smoothScroll > 0.6 &&
+      anchor.z > -1 && anchor.z < 1 && Math.abs(anchor.x) < 1 && Math.abs(anchor.y) < 1
+    label.style.opacity = visible ? '0.9' : '0'
+    if (!visible) return
+    bounds.getCenter(anchor)
+    anchor.y = bounds.max.y
+    anchor.project(camera)
+    const x = (anchor.x + 1) * window.innerWidth / 2
+    const y = (1 - anchor.y) * window.innerHeight / 2
+    const half = label.offsetWidth / 2
+    label.style.left = `${clamp(x, half + 12, window.innerWidth - half - 12)}px`
+    label.style.top = `${clamp(y - label.offsetHeight - 12, 12, window.innerHeight - label.offsetHeight - 12)}px`
+  })
 }
 
 function tickObjectInteractions() {
@@ -1153,7 +1176,7 @@ function tickObjectInteractions() {
     const pulse = Math.sin(state.elapsedTime * 7) * ia.hover * 0.018
     const click = Math.sin(ia.click * Math.PI) * 0.12
     const sc    = 1 + ia.hover * 0.035 + click
-    node.scale.set(ia.baseScale.x * sc, ia.baseScale.y * sc, ia.baseScale.z * sc)
+    node.scale.copy(ia.animationScale || ia.baseScale).multiplyScalar(sc * (OBJECT_SCALE_MULTIPLIERS[name] || 1))
     if (state.originalY[name] !== undefined) node.position.y += lift + pulse
   })
 }
@@ -1279,20 +1302,20 @@ async function initWorkFromAPI() {
           media = `<img src="${driveImageUrl(fileId)}" alt="${item.title}" data-drive-video="${fileId}" style="cursor:pointer">`
         } else {
           // Desktop: lazy iframe (loads only when scrolled into view)
-          media = `<iframe src="https://drive.google.com/file/d/${fileId}/preview" loading="lazy" allow="autoplay" allowfullscreen style="width:100%;aspect-ratio:16/9;border:none;display:block;pointer-events:none"></iframe>`
+          media = `<iframe src="https://drive.google.com/file/d/${fileId}/preview" title="Video preview" loading="lazy" allow="autoplay; fullscreen" allowfullscreen style="width:100%;aspect-ratio:16/9;border:none;display:block"></iframe>`
         }
       } else if (fileId && item.file_type === 'image') {
         // Google Drive image — use thumbnail URL
         media = `<img src="${driveImageUrl(fileId)}" alt="${item.title}">`
       } else if (item.file_type === 'video') {
         // Local video
-        media = `<video data-src="${item.file_path}" muted preload="metadata" controls></video>`
+        media = `<video data-src="${item.file_path}" playsinline preload="metadata" controls></video>`
       } else {
         // Local image
         media = `<img data-src="${item.file_path}" alt="${item.title}">`
       }
 
-      return `<article class="work-card ${item.size_class} ${hiddenClass}" ${extraAttr}>${media}<div class="work-meta"><strong>${item.title}</strong><span>${categoryLabel}</span></div></article>`
+      return `<article class="work-card ${item.file_type === 'video' ? 'is-video' : ''} ${item.size_class} ${hiddenClass}" ${extraAttr}>${media}<div class="work-meta"><strong>${item.title}</strong><span>${categoryLabel}</span></div></article>`
     }).join('')
 
     // Update count
@@ -1336,19 +1359,21 @@ function addMobileVideoPlayButtons() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation()
       if (video) {
+        if (video.dataset.src) {
+          video.src = video.dataset.src
+          video.removeAttribute('data-src')
+          video.load()
+        }
         video.style.pointerEvents = 'auto'
-        video.removeAttribute('controls')
-        video.play().catch(() => {})
-        video.addEventListener('click', () => {
-          if (video.paused) video.play().catch(() => {})
-          else video.pause()
-        })
+        video.controls = true
+        video.play().catch(() => { btn.style.display = '' })
       } else if (driveImg) {
         // Lazy-load Drive iframe on tap (replaces thumbnail)
         const fileId = driveImg.dataset.driveVideo
         const iframe = document.createElement('iframe')
         iframe.src = `https://drive.google.com/file/d/${fileId}/preview`
-        iframe.allow = 'autoplay'
+        iframe.title = 'Video preview'
+        iframe.allow = 'autoplay; fullscreen'
         iframe.allowFullscreen = true
         iframe.style.cssText = 'width:100%;border:none;display:block;pointer-events:auto'
         driveImg.replaceWith(iframe)

@@ -97,7 +97,8 @@ canvas { display: block; }
 .ilabel {
   position: fixed; z-index: 20; pointer-events: none;
   opacity: 0;
-  transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out);
+  transform: translateX(-50%);
+  transition: opacity 0.3s var(--ease-out);
 }
 .ilabel .dot {
   width: 5px; height: 5px; background: var(--accent);
@@ -950,10 +951,11 @@ body #ov-phone .connect-wrap {
 .loader-copy { min-width: 0; padding-left: clamp(22px, 6vw, 92px); }
 .loader-words {
   position: relative; height: clamp(43px, 8vw, 98px); overflow: hidden;
+  container-type: inline-size;
 }
 .loader-words span {
   position: absolute; left: 0; bottom: 0; white-space: nowrap;
-  color: #536f70; font-size: clamp(25px, 6.6vw, 92px); font-weight: 700;
+  color: #536f70; font-size: min(92px, 12.5cqw); font-weight: 700;
   line-height: .94; letter-spacing: -.065em;
   transform: translateY(115%); opacity: 0;
   animation: loaderWord 5s cubic-bezier(.76,0,.24,1) infinite;
@@ -1369,11 +1371,11 @@ body.mobile-mode #scroll-container {
 @media (max-width: 680px) {
   .loader-frame { width: min(76vw, 330px); height: min(72vh, 560px); }
   .loader-diagonal { width: 180%; transform: rotate(43deg); }
-  .loader-stage { top: 40%; height: 76px; }
-  .loader-copy { padding-left: 18px; }
+  .loader-stage { top: 40%; height: 76px; grid-template-columns: 1fr; }
+  .loader-copy { padding: 0 18px; }
   .loader-words { height: 40px; }
-  .loader-words span { font-size: clamp(21px, 8vw, 36px); letter-spacing: -.055em; }
-  .loader-logo { width: 54px; height: 54px; margin: 0 14px 16px; }
+  .loader-words span { font-size: min(36px, 12.5cqw); letter-spacing: -.055em; }
+  .loader-logo { position: absolute; right: 14px; bottom: 100%; width: 54px; height: 54px; margin: 0 0 24px; }
   .loader-percent { height: 20px; font-size: 10px; }
 }
 
@@ -1398,15 +1400,18 @@ body.mobile-mode #click-hint {
   animation: pulse 2s infinite;
 }
 
-/* Mobile: labels always visible (no hover on touch) */
-body.mobile-mode .ilabel {
-  display: block;
-  opacity: 0.85;
-}
+/* Labels are positioned from the current 3D pose on both screen sizes. */
+.ilabel { right: auto; }
 
-body.mobile-mode #lbl-lp { top: 48% !important; left: 50% !important; transform: translateX(-50%); }
-body.mobile-mode #lbl-ph { top: 35% !important; right: 10% !important; left: auto !important; }
-body.mobile-mode #lbl-id { top: 38% !important; left: 8% !important; }
+/* Keep video titles below the player, clear of the picture and controls. */
+#ov-laptop .work-card.is-video .work-meta {
+  position: static; padding: 14px 16px; background: #101310;
+  opacity: 1; transform: none;
+}
+#ov-laptop .work-card.is-video video,
+#ov-laptop .work-card.is-video iframe {
+  transform: none; pointer-events: auto;
+}
 
 /* Mobile: disable pointer-events on video/iframe so scrolling works over them */
 body.mobile-mode .work-card video,
